@@ -62,7 +62,7 @@ def set_seed(seed, env=None):
     np.random.seed(seed)
     torch.manual_seed(seed)
 
-def test_process(global_agent, vae, rnn, update_term, pid, state_dims, hidden_dims, lr, n_play=1, seed=0):
+def test_process(global_agent, vae, rnn, update_term, pid, state_dims, hidden_dims, lr, n_play=1, seed=0, record=None):
     env = gym.make('CarRacing-v0')
     set_seed(seed, env=env)
     env.verbose = 0
@@ -169,7 +169,7 @@ def save_ckpt(info, filename, root='ckpt', add_prefix=None, save_model=True):
     plt.savefig('{}/scores-{}.png'.format(ckpt_dir, filename))
 
 def play(n_play, seed, record):
-    vae_path = sorted(glob.glob(os.path.join(hp.ckpt_dir, 'vae', '*.pth.tar')))[-1]
+    vae_path = 'ckpt/vae/2000k.pth.tar'
     vae_state = torch.load(vae_path, map_location={'cuda:0': str(device)})
 
     rnn_path = sorted(glob.glob(os.path.join(hp.ckpt_dir, 'rnn', '*.pth.tar')))[-1]

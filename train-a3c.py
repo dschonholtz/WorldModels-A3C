@@ -4,7 +4,7 @@
 import numpy as np
 import random
 import math
-from tqdm import trange
+from tqdm import tqdm
 import pandas as pd
 import matplotlib.pyplot as plt
 import os, glob, sys
@@ -29,9 +29,6 @@ from hparams import HyperParams as hp
 Transition = namedtuple('Transition',
                         ('state', 'action', 'reward', 'next_state'))
 
-
-# device = 'cuda' if torch.cuda.is_available() else 'cpu'
-device = 'cpu'
 logdir = 'logs'
 
 MAX_R = 1.
@@ -43,7 +40,7 @@ transform = transforms.Compose([
 ])
 
 
-def obs2tensor(obs):
+def obs2tensor(obs, device):
     binary_road = obs2feature(obs) # (10, 10)
     s = binary_road.flatten()
     s = torch.tensor(s.reshape([1, -1]), dtype=torch.float)
@@ -82,6 +79,8 @@ def train_process(global_agent, vae, rnn, update_term, pid, state_dims, hidden_d
     running_means = []
     step = 0
     for ep in range(max_ep):
+        if ep == 1 or ep % 50 == 0:
+            print(f'{pid} is on epoch: {ep}')
         obs = env.reset()
         score = 0.
         i = 0
@@ -90,7 +89,7 @@ def train_process(global_agent, vae, rnn, update_term, pid, state_dims, hidden_d
             # env.render()
             next_obs, reward, done, _ = env.step(agent.possible_actions[-2])
             score += reward
-        next_obs, next_s = obs2tensor(next_obs)
+        next_obs, next_s = obs2tensor(next_obs, device)
         # print(next_obs.shape)
         with torch.no_grad():
             next_latent_mu, _ = vae.encoder(next_obs)
@@ -112,7 +111,7 @@ def train_process(global_agent, vae, rnn, update_term, pid, state_dims, hidden_d
             next_obs, reward, done, _ = env.step(action.reshape([-1]))
 
             with torch.no_grad():
-                next_obs, next_s = obs2tensor(next_obs)
+                next_obs, next_s = obs2tensor(next_obs, device)
                 next_latent_mu, _ = vae.encoder(next_obs)
 
             # MDN-RNN about time t+1
@@ -190,6 +189,8 @@ def test_process(global_agent, vae, rnn, update_term, pid, state_dims, hidden_di
     worse = 0
     best_agent_state = None
     for ep in range(test_ep):
+        if ep == 1 or ep % 50 == 0:
+            print(f'{pid} is on epoch: {ep}')
         agent.load_state_dict(global_agent.state_dict())
         env.reset()
         score = 0.
@@ -199,7 +200,7 @@ def test_process(global_agent, vae, rnn, update_term, pid, state_dims, hidden_di
             env.render()
             next_obs, reward, done, _ = env.step(agent.possible_actions[-2])
             score += reward
-        next_obs, next_s = obs2tensor(next_obs)
+        next_obs, next_s = obs2tensor(next_obs, device)
         with torch.no_grad():
             next_latent_mu, _ = vae.encoder(next_obs)
         
@@ -222,7 +223,7 @@ def test_process(global_agent, vae, rnn, update_term, pid, state_dims, hidden_di
             next_obs, reward, done, _ = env.step(action.reshape([-1]))
 
             with torch.no_grad():
-                next_obs, next_s = obs2tensor(next_obs)
+                next_obs, next_s = obs2tensor(next_obs, device)
                 next_latent_mu, _ = vae.encoder(next_obs)
 
             # MDN-RNN about time t+1
@@ -302,52 +303,63 @@ def save_means_plot(infos, add_prefix=None, root='ckpt'):
         plt.plot(info['avgs'])
     plt.savefig('{}/total-scores.png'.format(ckpt_dir))
 
-
-# ### V model & M model
-
-vae_path = sorted(glob.glob(os.path.join(hp.ckpt_dir, 'vae', '*.pth.tar')))[-1]
-vae_state = torch.load(vae_path, map_location={'cuda:0': str(device)})
-
-rnn_path = sorted(glob.glob(os.path.join(hp.ckpt_dir, 'rnn', '*.pth.tar')))[-1]
-rnn_state = torch.load(rnn_path, map_location={'cuda:0': str(device)})
-
-vae = VAE(hp.vsize).to(device)
-vae.load_state_dict(vae_state['model'])
-vae.eval()
-
-# rnn = MDNRNN(hp.vsize, hp.asize, hp.rnn_hunits, hp.n_gaussians).to(device)
-rnn = RNN(hp.vsize, hp.asize, hp.rnn_hunits).to(device)
-rnn.load_state_dict(rnn_state['model'])
-# mdnrnn.load_state_dict({k.strip('_l0'): v for k, v in rnn_state['state_dict'].items()})
-rnn.eval()
-
-print('Loaded VAE: {}, RNN: {}'.format(vae_path, rnn_path))
-
-# ###  Environment
-
 total_infos = []
 max_ep = hp.max_ep*2
 test_ep = hp.max_ep
 
-state_dims = hp.vsize + hp.rnn_hunits + 100 if hp.use_binary_feature else hp.vsize + hp.rnn_hunits
-hidden_dims = hp.ctrl_hidden_dims
-lr = 1e-4
+def run():
+    # ### V model & M model
+    mp.freeze_support()
 
-global_agent = A3C(input_dims=state_dims, hidden_dims=hidden_dims, lr=lr).to(device)
-global_agent.share_memory()
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    # vae_path = sorted(glob.glob(os.path.join(hp.ckpt_dir, 'vae', '*.pth.tar')))[-1]
+    vae_path = os.path.join(hp.ckpt_dir, 'vae', '2000k.pth.tar')
+    vae_state = torch.load(vae_path, map_location={'cuda:0': str(device)})
 
-update_term = 100
-n_processes = 3
-processes = []
+    rnn_path = sorted(glob.glob(os.path.join(hp.ckpt_dir, 'rnn', '*.pth.tar')))[-1]
+    rnn_state = torch.load(rnn_path, map_location={'cuda:0': str(device)})
 
-for pid in range(n_processes+1):
-    if pid == 0:
-        p = mp.Process(target=test_process, args=(global_agent, vae, rnn, update_term, pid, state_dims, hidden_dims, lr,))
-    else:
-        p = mp.Process(target=train_process, args=(global_agent, vae, rnn, update_term, pid, state_dims, hidden_dims, lr,))
-    p.start()
-    processes.append(p)
+    vae = VAE(hp.vsize).to(device)
+    vae.load_state_dict(vae_state['model'])
+    vae.eval()
 
-for p in processes:
-    p.join()
+    # rnn = MDNRNN(hp.vsize, hp.asize, hp.rnn_hunits, hp.n_gaussians).to(device)
+    rnn = RNN(hp.vsize, hp.asize, hp.rnn_hunits).to(device)
+    rnn.load_state_dict(rnn_state['model'])
+    # mdnrnn.load_state_dict({k.strip('_l0'): v for k, v in rnn_state['state_dict'].items()})
+    rnn.eval()
 
+    print('Loaded VAE: {}, RNN: {}'.format(vae_path, rnn_path))
+
+    # ###  Environment
+
+    state_dims = hp.vsize + hp.rnn_hunits + 100 if hp.use_binary_feature else hp.vsize + hp.rnn_hunits
+    hidden_dims = hp.ctrl_hidden_dims
+    lr = 1e-4
+
+    global_agent = A3C(input_dims=state_dims, hidden_dims=hidden_dims, lr=lr).to(device)
+    global_agent.share_memory()
+
+    update_term = 100
+    n_processes = 3
+    processes = []
+    try:
+         mp.set_start_method('spawn', force=True)
+    except RuntimeError:
+        pass
+
+    for pid in range(n_processes+1):
+        print(f'Starting pid: {pid}')
+        if pid == 0:
+            p = mp.Process(target=test_process, args=(global_agent, vae, rnn, update_term, pid, state_dims, hidden_dims, lr, device))
+        else:
+            p = mp.Process(target=train_process, args=(global_agent, vae, rnn, update_term, pid, state_dims, hidden_dims, lr, device))
+        p.start()
+        processes.append(p)
+
+    for p in processes:
+        p.join()
+
+
+if __name__ == '__main__':
+    run()

@@ -11,14 +11,16 @@ from torchvision.utils import save_image
 from torch.nn import functional as F
 from datetime import datetime
 
-DEVICE = None
+DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 def train():
     global_step = 0
 
     # Loaded pretrained VAE
     vae = VAE(hp.vsize).to(DEVICE)
-    ckpt = sorted(glob.glob(os.path.join(hp.ckpt_dir, 'vae', '*k.pth.tar')))[-1]
+    # this sort always returns the 999k option since the 2000k is larger than the 0 preceded values
+    # ckpt = sorted(glob.glob(os.path.join(hp.ckpt_dir, 'vae', '*k.pth.tar')))[-1]
+    ckpt = os.path.join(hp.ckpt_dir, 'vae', '2000k.pth.tar')
     vae_state = torch.load(ckpt)
     vae.load_state_dict(vae_state['model'])
     vae.eval()
@@ -127,6 +129,5 @@ def evaluate(test_loader, vae, rnn, global_step=0):
 
 
 if __name__ == '__main__':
-    DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
-    np.random.seed(hp.seed)
+    # np.random.seed(hp.seed)
     train()

@@ -5,7 +5,7 @@ class HyperParams:
     memory = 'RNN'
     controller = 'A3C'
 
-    extra = False
+    extra = True
     data_dir = 'datasets'
     extra_dir = 'additional'
     ckpt_dir = 'ckpt'
@@ -43,7 +43,7 @@ class RNNHyperParams:
     vision = 'VAE'
     memory = 'RNN'
 
-    extra = False
+    extra = True
     data_dir = 'datasets'
     extra_dir = 'additional'
     ckpt_dir = 'ckpt'
@@ -64,14 +64,14 @@ class RNNHyperParams:
     log_interval = 1000
     save_interval = 2000
 
-    max_step = 100000
+    max_step = 150000
 
     n_workers = 0
 
 class VAEHyperParams:
     vision = 'VAE'
 
-    extra = False
+    extra = True
     data_dir = 'datasets'
     extra_dir = 'additional'
     ckpt_dir = 'ckpt'
@@ -91,6 +91,6 @@ class VAEHyperParams:
     log_interval = 5000
     save_interval = 10000
 
-    max_step = 2000000
+    max_step = 200000
 
     n_workers = 0

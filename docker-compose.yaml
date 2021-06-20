@@ -1,0 +1,18 @@
+version: '3'
+services:
+    wm-a3c:
+        stdin_open:
+            true
+        tty:
+            true
+        build:
+            context: .
+            dockerfile: docker/Dockerfile.wm-a3c
+        volumes:
+            - .:/app
+        deploy:
+            resources:
+                reservations:
+                    devices:
+                        - capabilities:
+                              - gpu

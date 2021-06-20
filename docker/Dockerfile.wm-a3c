@@ -1,0 +1,41 @@
+FROM nvidia/cuda:11.2.0-base-ubuntu20.04
+
+WORKDIR '/app'
+
+RUN apt-get update
+RUN apt-get install software-properties-common -y
+RUN add-apt-repository ppa:deadsnakes/ppa
+RUN apt-get update
+RUN DEBIAN_FRONTEND="noninteractive" apt-get -y install tzdata
+RUN apt-get -y install swig build-essential python-opengl xvfb fontconfig-config libfontconfig1-dev curl \
+    python3.7 python3.7-dev python3.7-distutils
+
+# Register the version in alternatives
+RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.7 1
+
+# Set python 3 as the default python
+RUN update-alternatives --set python /usr/bin/python3.7
+
+# Upgrade pip to latest version
+RUN curl -s https://bootstrap.pypa.io/get-pip.py -o get-pip.py && \
+    python get-pip.py --force-reinstall && \
+    rm get-pip.py
+
+COPY . .
+RUN pip install -r docker/requirements.txt
+
+ADD docker/startup_script.sh /usr/local/bin/startup_script.sh
+
+# Give permissions to execute
+RUN chmod 777 /usr/local/bin/startup_script.sh
+
+# Set the display when we run the container. This allows us to record without the user needing to type anything explicitly
+# This code snippet was taken from https://github.com/duckietown/gym-duckietown/issues/123
+ENTRYPOINT ["/usr/local/bin/startup_script.sh"]
+
+#RUN python rollout.py
+#python train-vae.py
+#python train-rnn.py
+#python train-a3c.py
+#python rollout-a3c.py
+

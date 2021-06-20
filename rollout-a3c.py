@@ -31,7 +31,7 @@ Transition = namedtuple('Transition',
 
 
 # device = 'cuda' if torch.cuda.is_available() else 'cpu'
-device = 'cpu'
+# device = 'cpu'
 logdir = 'logs'
 
 # gym.envs.box2d.car_racing.STATE_W, gym.envs.box2d.car_racing.STATE_H = 64, 64
@@ -47,7 +47,7 @@ transform = transforms.Compose([
 ])
 
 
-def obs2tensor(obs):
+def obs2tensor(obs, device):
     binary_road = obs2feature(obs) # (10, 10)
     s = binary_road.flatten()
     s = torch.tensor(s.reshape([1, -1]), dtype=torch.float)
@@ -99,7 +99,7 @@ def test_process(global_agent, vae, rnn, update_term, pid, state_dims, hidden_di
             env.render()
             next_obs, reward, done, _ = env.step(agent.possible_actions[-2])
             score += reward
-        next_obs_tensor, next_s = obs2tensor(next_obs)
+        next_obs_tensor, next_s = obs2tensor(next_obs, device)
         with torch.no_grad():
             next_latent_mu, _ = vae.encoder(next_obs_tensor)
         
@@ -142,7 +142,7 @@ def test_process(global_agent, vae, rnn, update_term, pid, state_dims, hidden_di
             done_lst.append(done)
 
             with torch.no_grad():
-                next_obs_tensor, next_s = obs2tensor(next_obs)
+                next_obs_tensor, next_s = obs2tensor(next_obs, device)
                 next_latent_mu, _ = vae.encoder(next_obs_tensor)
 
             # MDN-RNN about time t+1
@@ -206,45 +206,51 @@ def save_ckpt(info, filename, root='ckpt', add_prefix=None, save_model=True):
     plt.plot(info['avgs'])
     plt.savefig('{}/scores-{}.png'.format(ckpt_dir, filename))
 
-
-# ### V model & M model
-
-vae_path = sorted(glob.glob(os.path.join(hp.ckpt_dir, 'vae', '*.pth.tar')))[-1]
-vae_state = torch.load(vae_path, map_location={'cuda:0': str(device)})
-
-rnn_path = sorted(glob.glob(os.path.join(hp.ckpt_dir, 'rnn', '*.pth.tar')))[-1]
-rnn_state = torch.load(rnn_path, map_location={'cuda:0': str(device)})
-
-agent_path = sorted(glob.glob(os.path.join(hp.ckpt_dir, 'A3C', '*.pth.tar')))[-1]
-agent_state = torch.load(agent_path, map_location={'cuda:0': str(device)})
-
-vae = VAE(hp.vsize).to(device)
-vae.load_state_dict(vae_state['model'])
-vae.eval()
-
-# rnn = MDNRNN(hp.vsize, hp.asize, hp.rnn_hunits, hp.n_gaussians).to(device)
-rnn = RNN(hp.vsize, hp.asize, hp.rnn_hunits).to(device)
-rnn.load_state_dict(rnn_state['model'])
-# mdnrnn.load_state_dict({k.strip('_l0'): v for k, v in rnn_state['state_dict'].items()})
-rnn.eval()
-
-print('Loaded VAE: {}\n RNN: {}\n Agent: {}\n'.format(vae_path, rnn_path, agent_path))
-
 # ###  Environment
-
 total_infos = []
 test_ep = 300
 
-state_dims = hp.vsize + hp.rnn_hunits + 100 if hp.use_binary_feature else hp.vsize + hp.rnn_hunits
-hidden_dims = 512
-lr = 1e-4
 
-global_agent = A3C(input_dims=state_dims, hidden_dims=hidden_dims, lr=lr).to(device)
-global_agent.share_memory()
-# import pdb; pdb.set_trace()
-global_agent.load_state_dict(agent_state['agent'].state_dict())
+def run():
+    # ### V model & M model
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    mp.freeze_support()
+    vae_path = sorted(glob.glob(os.path.join(hp.ckpt_dir, 'vae', '*.pth.tar')))[-1]
+    vae_state = torch.load(vae_path, map_location={'cuda:0': str(device)})
 
-p = mp.Process(target=test_process, args=(global_agent, vae, rnn, 0, 0, state_dims, hidden_dims, lr,))
-p.start()
-p.join()
+    rnn_path = sorted(glob.glob(os.path.join(hp.ckpt_dir, 'rnn', '*.pth.tar')))[-1]
+    rnn_state = torch.load(rnn_path, map_location={'cuda:0': str(device)})
+
+    agent_path = sorted(glob.glob(os.path.join(hp.ckpt_dir, 'A3C', '*.pth.tar')))[-1]
+    agent_state = torch.load(agent_path, map_location={'cuda:0': str(device)})
+
+    vae = VAE(hp.vsize).to(device)
+    vae.load_state_dict(vae_state['model'])
+    vae.eval()
+
+    # rnn = MDNRNN(hp.vsize, hp.asize, hp.rnn_hunits, hp.n_gaussians).to(device)
+    rnn = RNN(hp.vsize, hp.asize, hp.rnn_hunits).to(device)
+    rnn.load_state_dict(rnn_state['model'])
+    # mdnrnn.load_state_dict({k.strip('_l0'): v for k, v in rnn_state['state_dict'].items()})
+    rnn.eval()
+
+    print('Loaded VAE: {}\n RNN: {}\n Agent: {}\n'.format(vae_path, rnn_path, agent_path))
+
+    state_dims = hp.vsize + hp.rnn_hunits + 100 if hp.use_binary_feature else hp.vsize + hp.rnn_hunits
+    hidden_dims = 512
+    lr = 1e-4
+
+    global_agent = A3C(input_dims=state_dims, hidden_dims=hidden_dims, lr=lr).to(device)
+    global_agent.share_memory()
+    # import pdb; pdb.set_trace()
+    global_agent.load_state_dict(agent_state['agent'].state_dict())
+    mp.set_start_method('spawn', force=True)
+    p = mp.Process(target=test_process, args=(global_agent, vae, rnn, 0, 0, state_dims, hidden_dims, lr, device))
+    p.start()
+    p.join()
+
+
+if __name__ == '__main__':
+    run()
+
 

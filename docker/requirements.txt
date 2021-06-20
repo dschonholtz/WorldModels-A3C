@@ -1,0 +1,12 @@
+gym[box2d]
+torch
+torchvision
+numpy
+hparams
+tqdm
+matplotlib
+opencv-python
+pandas
+array2gif
+Pillow
+pyglet==1.5.15

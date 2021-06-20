@@ -1,5 +1,15 @@
 # World Models A3C
 
+## Updated to have docker support for easy running
+
+The command I have found to work the best is: 
+This is admitedly using a pytorch image that is compatible with my
+nvidia set up. Make sure the pytorch base image works for you
+in the Dockerfile.wm-a3c file.
+
+    docker-compose up --build -d
+    docker-compose run wm-a3c
+
 ## Implementation of a variant of World Models
 
 ![](/assets/world-models.png)
@@ -60,6 +70,8 @@
         extra = True
 
     python train-vae.py
+
+    Increase the max step value in hparams.py to not just load adn quit.
     python train-rnn.py
 
 ### Train new C with the improved V and M

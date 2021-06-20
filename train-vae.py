@@ -20,7 +20,7 @@ def train():
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
 
     # Loaded pretrained VAE
-    ckpts = sorted(glob.glob(os.path.join(hp.ckpt_dir, 'vae', '*k.pth.tar')))
+    ckpts = os.path.join(hp.ckpt_dir, 'vae', '2000k.pth.tar')
     if ckpts:
         ckpt = ckpts[-1]
         vae_state = torch.load(ckpt)
